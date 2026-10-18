@@ -1,0 +1,17 @@
+# build outputs
+.gradle/
+.kotlin/
+build/
+*.apk
+
+# secrets and machine-specific config
+secrets.properties
+local.properties
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+
+# macOS
+.DS_Store
