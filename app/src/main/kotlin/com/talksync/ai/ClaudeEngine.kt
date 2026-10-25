@@ -44,21 +44,21 @@ class ClaudeEngine {
         )?.let(::sanitizeSummary)
     }
 
-    fun translateText(text: String, sourceLanguage: String): String? {
+    fun translateText(text: String, sourceLanguage: String, targetLanguage: String = ENGLISH): String? {
         if (!ClaudeConfig.isConfigured) return null
         val cleaned = text.trim().takeIf { it.isNotBlank() } ?: return null
-        val prompt = "Translate this $sourceLanguage text to English:\n\n$cleaned"
+        val prompt = "Translate this $sourceLanguage text to $targetLanguage:\n\n$cleaned"
         return callClaude(
             prompt = prompt,
             maxTokens = 256,
-            system = TRANSLATION_SYSTEM,
+            system = translationSystem(targetLanguage),
         )?.let(::sanitizeTranslation)?.takeIf { it.isNotBlank() }
     }
 
-    fun translateForeignTextIfPresent(text: String): ForeignTextTranslation? {
+    fun translateForeignTextIfPresent(text: String, targetLanguage: String = ENGLISH): ForeignTextTranslation? {
         if (!ClaudeConfig.isConfigured) return null
         val cleaned = text.trim().takeIf { it.isNotBlank() } ?: return null
-        val prompt = buildString {
+        val prompt = if (targetLanguage != ENGLISH) translateIntoPrompt(cleaned, targetLanguage) else buildString {
             appendLine("Detect whether this transcript contains ANY non-English text, including one word, phrase, or code-switching.")
             appendLine("If every meaningful word is English, return exactly:")
             appendLine("""{"has_foreign_text":false}""")
@@ -86,6 +86,7 @@ class ClaudeEngine {
             repairContextualTranslation(
                 originalText = cleaned,
                 partialTranslation = parsed.translatedText,
+                targetLanguage = targetLanguage,
             )
         } else {
             parsed
@@ -275,13 +276,40 @@ class ClaudeEngine {
         }.getOrNull()
     }
 
+    // Used when the target is not English: translate the whole transcript, and say nothing is to be left as it was.
+    private fun translateIntoPrompt(transcript: String, targetLanguage: String): String = buildString {
+        appendLine("Translate this transcript into $targetLanguage so a reader who only reads $targetLanguage can follow it.")
+        appendLine("If every meaningful word is already $targetLanguage, return exactly:")
+        appendLine("""{"has_foreign_text":false}""")
+        appendLine()
+        appendLine("Otherwise translate the ENTIRE transcript into $targetLanguage, keeping the meaning, tone, and names.")
+        appendLine("Return ONLY compact JSON with these keys:")
+        appendLine("""{"has_foreign_text":true,"translated_text":"...","detected_language":"..."}""")
+        appendLine("detected_language is the language the transcript was spoken in, as a short ISO-like code such as \"en\", or \"unknown\".")
+        appendLine("Do not add markdown, explanation, labels, or quotes outside the JSON.")
+        appendLine()
+        appendLine("Transcript:")
+        append(transcript)
+    }
+
+    // Same system prompt as always for English; for any other target only the language name changes.
+    private fun translationSystem(targetLanguage: String): String =
+        if (targetLanguage == ENGLISH) TRANSLATION_SYSTEM else TRANSLATION_SYSTEM.replace(ENGLISH, targetLanguage)
+
     private fun repairContextualTranslation(
         originalText: String,
         partialTranslation: String,
+        targetLanguage: String = ENGLISH,
     ): ForeignTextTranslation? {
         val prompt = buildString {
             appendLine("The previous translation only translated a fragment.")
-            appendLine("Return the ENTIRE original transcript in English, preserving all English context and replacing only non-English text with English.")
+            appendLine(
+                if (targetLanguage == ENGLISH) {
+                    "Return the ENTIRE original transcript in English, preserving all English context and replacing only non-English text with English."
+                } else {
+                    "Return the ENTIRE original transcript translated into $targetLanguage."
+                },
+            )
             appendLine("Return ONLY compact JSON:")
             appendLine("""{"has_foreign_text":true,"translated_text":"...","detected_language":"..."}""")
             appendLine()
@@ -318,6 +346,7 @@ class ClaudeEngine {
 
     private companion object {
         const val TAG = "ClaudeEngine"
+        const val ENGLISH = "English"
         const val MODEL = "claude-haiku-4-5"
         const val API_URL = "https://api.anthropic.com/v1/messages"
         const val ANTHROPIC_VERSION = "2023-06-01"

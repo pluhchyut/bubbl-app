@@ -61,6 +61,8 @@ import com.talksync.audio.DeepLTranslationEngine
 import com.talksync.audio.ElevenLabsTranscriptionEngine
 import com.talksync.translation.AslTranslationEngine
 import com.talksync.translation.LanguageIdentifier
+import com.talksync.translation.TranslationTarget
+import com.talksync.translation.TranslationTargets
 import com.talksync.util.SlangExpander
 import com.talksync.util.toHistoryTimestamp
 import com.talksync.vision.AVHypothesis
@@ -1109,7 +1111,7 @@ class ConversationViewModel(application: Application) : AndroidViewModel(applica
                     text = result.text,
                     detectedLanguage = lang,
                     translateWholeUtterance = settings.value.translationEnabled &&
-                        lang != null && lang.lowercase().take(2) != "en",
+                        lang != null && lang.lowercase().take(2) != settings.value.targetLanguage,
                 )
             }.onFailure { error ->
                 if (error is kotlinx.coroutines.CancellationException) throw error
@@ -1691,17 +1693,19 @@ class ConversationViewModel(application: Application) : AndroidViewModel(applica
      * First non-null result wins. Claude retries internally (up to 3×) so this
      * should always produce a result as long as there is network.
      */
-    private suspend fun raceTranslation(text: String, sourceLang: String): String? = coroutineScope {
+    private suspend fun raceTranslation(text: String, sourceLang: String, target: TranslationTarget): String? = coroutineScope {
         val channel = Channel<String>(capacity = Channel.UNLIMITED)
 
+        // DeepL is only wired for English output, so any other target goes to Claude alone.
         val deeplJob = async(Dispatchers.IO) {
+            if (target.code != TranslationTargets.DEFAULT_CODE) return@async null
             deepLTranslationEngine.translate(text, sourceLang)
                 ?.also { channel.trySend(it) }
         }
         // Claude has no inner timeout — OkHttp's 25s call timeout is the ceiling,
         // and it retries up to 3× on transient failures before giving up.
         val claudeJob = async(Dispatchers.IO) {
-            claudeEngine.translateText(text, sourceLang)
+            claudeEngine.translateText(text, sourceLang, target.englishName)
                 ?.also { channel.trySend(it) }
         }
 
@@ -1717,8 +1721,9 @@ class ConversationViewModel(application: Application) : AndroidViewModel(applica
         detectedLanguage: String?,
         translateWholeUtterance: Boolean,
     ): ForeignTextTranslation? {
+        val target = TranslationTargets.forCode(settings.value.targetLanguage)
         if (translateWholeUtterance && detectedLanguage != null) {
-            raceTranslation(text, detectedLanguage)?.let { translated ->
+            raceTranslation(text, detectedLanguage, target)?.let { translated ->
                 return ForeignTextTranslation(
                     translatedText = translated,
                     detectedLanguage = detectedLanguage,
@@ -1726,7 +1731,7 @@ class ConversationViewModel(application: Application) : AndroidViewModel(applica
             }
         }
         return withContext(Dispatchers.IO) {
-            claudeEngine.translateForeignTextIfPresent(text)
+            claudeEngine.translateForeignTextIfPresent(text, target.englishName)
         }
     }
 
@@ -1735,13 +1740,14 @@ class ConversationViewModel(application: Application) : AndroidViewModel(applica
         detectedLanguage: String?,
         translateWholeUtterance: Boolean,
     ): ForeignTextTranslation? = withTimeoutOrNull(12_000L) {
+        val target = TranslationTargets.forCode(settings.value.targetLanguage)
         if (settings.value.translationEnabled && claudeConfigured) {
             withContext(Dispatchers.IO) {
-                claudeEngine.translateForeignTextIfPresent(text)
+                claudeEngine.translateForeignTextIfPresent(text, target.englishName)
             }?.let { return@withTimeoutOrNull it }
         }
         if (settings.value.translationEnabled && translateWholeUtterance && detectedLanguage != null) {
-            raceTranslation(text, detectedLanguage)?.let { translated ->
+            raceTranslation(text, detectedLanguage, target)?.let { translated ->
                 ForeignTextTranslation(
                     translatedText = translated,
                     detectedLanguage = detectedLanguage,

@@ -65,6 +65,7 @@ import com.talksync.model.ConversationDistanceMode
 import com.talksync.model.EmphasisToneMode
 import com.talksync.model.SpeechBubbleData
 import com.talksync.translation.LanguageModelManager
+import com.talksync.translation.TranslationTargets
 import com.talksync.ui.components.SpeechBubble
 import com.talksync.ui.theme.BrandAccent
 import com.talksync.ui.theme.HairlineWhite
@@ -409,13 +410,32 @@ fun SettingsScreen(
 
         SettingsSection(title = "Language & Translation") {
             ToggleRow(
-                label = "Auto translate to English",
+                label = "Auto translate",
                 checked = settings.translationEnabled,
                 onCheckedChange = settingsViewModel::updateTranslationEnabled,
             )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Translate into",
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.s),
+                verticalArrangement = Arrangement.spacedBy(Spacing.s),
+            ) {
+                TranslationTargets.all.forEach { option ->
+                    FilterChip(
+                        selected = settings.targetLanguage == option.code,
+                        onClick = { settingsViewModel.updateTargetLanguage(option.code) },
+                        label = { Text(option.englishName) },
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "When someone speaks a different language, their words appear in English in the bubble. Tap the globe button during a conversation to see the original.",
+                text = "When someone speaks a different language, their words appear in ${TranslationTargets.forCode(settings.targetLanguage).englishName} in the bubble. Tap the globe button during a conversation to see the original.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp,
                 lineHeight = 18.sp,

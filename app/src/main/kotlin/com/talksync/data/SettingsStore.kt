@@ -14,6 +14,7 @@ import com.talksync.audio.SpeechBackendKind
 import com.talksync.model.BubbleAnchorMode
 import com.talksync.model.ConversationDistanceMode
 import com.talksync.model.EmphasisToneMode
+import com.talksync.translation.TranslationTargets
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
@@ -43,6 +44,8 @@ data class AppSettings(
     val bubbleAnchorMode: String = BubbleAnchorMode.CLASSIC.value,
     val debugModeEnabled: Boolean = false,
     val translationEnabled: Boolean = true,
+    /** Code of the language captions are translated into ("Translate into" in Settings). */
+    val targetLanguage: String = TranslationTargets.DEFAULT_CODE,
     val speechBackend: String = SpeechBackendKind.DEEPGRAM.value,
     /**
      * Controls how the bubble overlay scales for the speaker's distance.
@@ -107,6 +110,7 @@ class SettingsStore(context: Context) {
                 bubbleAnchorMode = preferences[bubbleAnchorModeKey] ?: BubbleAnchorMode.CLASSIC.value,
                 debugModeEnabled = preferences[debugModeKey] ?: false,
                 translationEnabled = preferences[translationEnabledKey] ?: true,
+                targetLanguage = preferences[targetLanguageKey] ?: TranslationTargets.DEFAULT_CODE,
                 speechBackend = preferences[speechBackendKey] ?: SpeechBackendKind.DEEPGRAM.value,
                 conversationDistanceMode = preferences[conversationDistanceModeKey]
                     ?: ConversationDistanceMode.FOCUS.value,
@@ -203,6 +207,11 @@ class SettingsStore(context: Context) {
         dataStore.edit { it[translationEnabledKey] = value }
     }
 
+    suspend fun updateTargetLanguage(value: String) {
+        TranslationTargets.forCode(value) // only codes from the picker are valid
+        dataStore.edit { it[targetLanguageKey] = value }
+    }
+
     suspend fun updateSpeechBackend(value: String) {
         dataStore.edit { it[speechBackendKey] = value }
     }
@@ -257,6 +266,7 @@ class SettingsStore(context: Context) {
         val bubbleAnchorModeKey = stringPreferencesKey("bubble_anchor_mode")
         val debugModeKey = booleanPreferencesKey("debug_mode_enabled")
         val translationEnabledKey = booleanPreferencesKey("translation_enabled")
+        val targetLanguageKey = stringPreferencesKey("target_language")
         val speechBackendKey = stringPreferencesKey("speech_backend")
         val conversationDistanceModeKey = stringPreferencesKey("conversation_distance_mode")
         val cardboardParallaxKey = intPreferencesKey("cardboard_parallax_px")

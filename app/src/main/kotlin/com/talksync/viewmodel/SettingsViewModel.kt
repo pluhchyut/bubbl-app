@@ -106,6 +106,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { settingsStore.updateTranslationEnabled(value) }
     }
 
+    fun updateTargetLanguage(value: String) {
+        viewModelScope.launch { settingsStore.updateTargetLanguage(value) }
+    }
+
     fun updateSpeechBackend(value: String) {
         viewModelScope.launch { settingsStore.updateSpeechBackend(value) }
     }
